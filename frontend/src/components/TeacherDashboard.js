@@ -3,8 +3,12 @@ import { teacherAPI, studentAPI } from '../services/api';
 
 function TeacherDashboard({ user, onLogout }) {
   const [students, setStudents] = useState([]);
-  const [subjects, setSubjects] = useState([]);
-  const [activeTab, setActiveTab] = useState('grades');
+  const [allSubjects, setAllSubjects] = useState([]);
+  const [mySubjects, setMySubjects] = useState([]);
+  const [activeTab, setActiveTab] = useState('subjects');
+  const [selectedSubject, setSelectedSubject] = useState(null);
+  const [labTemplates, setLabTemplates] = useState([]);
+  const [labSubmissions, setLabSubmissions] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [formData, setFormData] = useState({});
@@ -14,14 +18,25 @@ function TeacherDashboard({ user, onLogout }) {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (selectedSubject && activeTab === 'labs') {
+      loadLabTemplates();
+    }
+    if (selectedSubject && activeTab === 'submissions') {
+      loadLabSubmissions();
+    }
+  }, [selectedSubject, activeTab]);
+
   const loadData = async () => {
     try {
-      const [studentsRes, subjectsRes] = await Promise.all([
+      const [studentsRes, subjectsRes, mySubjectsRes] = await Promise.all([
         teacherAPI.getStudents(),
         teacherAPI.getSubjects(),
+        teacherAPI.getMySubjects(user.userId),
       ]);
       setStudents(studentsRes.data);
-      setSubjects(subjectsRes.data);
+      setAllSubjects(subjectsRes.data);
+      setMySubjects(mySubjectsRes.data);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -29,9 +44,52 @@ function TeacherDashboard({ user, onLogout }) {
     }
   };
 
-  const openModal = (type) => {
+  const loadLabTemplates = async () => {
+    if (!selectedSubject) return;
+    try {
+      const res = await teacherAPI.getLabTemplatesBySubject(selectedSubject.id);
+      setLabTemplates(res.data);
+    } catch (error) {
+      console.error('Error loading lab templates:', error);
+    }
+  };
+
+  const loadLabSubmissions = async () => {
+    if (!selectedSubject) return;
+    try {
+      const res = await teacherAPI.getLabSubmissionsBySubject(selectedSubject.id);
+      setLabSubmissions(res.data);
+    } catch (error) {
+      console.error('Error loading lab submissions:', error);
+    }
+  };
+
+  const handleSubscribe = async (subjectId) => {
+    try {
+      await teacherAPI.subscribeToSubject(subjectId, user.userId);
+      loadData();
+    } catch (error) {
+      console.error('Error subscribing:', error);
+      alert('Ошибка при подписке на предмет');
+    }
+  };
+
+  const handleUnsubscribe = async (subjectId) => {
+    try {
+      await teacherAPI.unsubscribeFromSubject(subjectId, user.userId);
+      loadData();
+      if (selectedSubject?.id === subjectId) {
+        setSelectedSubject(null);
+      }
+    } catch (error) {
+      console.error('Error unsubscribing:', error);
+      alert('Ошибка при отписке от предмета');
+    }
+  };
+
+  const openModal = (type, item = null) => {
     setModalType(type);
-    setFormData({});
+    setFormData(item || {});
     setShowModal(true);
   };
 
@@ -46,22 +104,60 @@ function TeacherDashboard({ user, onLogout }) {
       if (modalType === 'grade') {
         await teacherAPI.addGrade({
           student: { id: parseInt(formData.studentId) },
-          subject: { id: parseInt(formData.subjectId) },
+          subject: { id: selectedSubject.id },
           value: parseInt(formData.value),
           description: formData.description,
         });
-      } else if (modalType === 'lab') {
-        await teacherAPI.addLab({
-          student: { id: parseInt(formData.studentId) },
-          subject: { id: parseInt(formData.subjectId) },
+      } else if (modalType === 'labTemplate') {
+        const labTemplate = {
           title: formData.title,
-          points: parseInt(formData.points),
+          description: formData.description,
+          subject: { id: selectedSubject.id },
+          maxPoints: parseInt(formData.maxPoints),
+          orderNumber: parseInt(formData.orderNumber),
+        };
+        if (formData.id) {
+          await teacherAPI.updateLabTemplate(formData.id, labTemplate);
+        } else {
+          await teacherAPI.createLabTemplate(labTemplate);
+        }
+        loadLabTemplates();
+      } else if (modalType === 'labSubmission') {
+        const selectedTemplate = labTemplates.find(t => t.id === parseInt(formData.labTemplateId));
+        const points = parseInt(formData.points);
+        
+        if (points > selectedTemplate.maxPoints) {
+          alert(`Баллы не могут превышать максимальные баллы лабораторной работы (${selectedTemplate.maxPoints})`);
+          return;
+        }
+        
+        await teacherAPI.createLabSubmission({
+          labTemplate: { id: parseInt(formData.labTemplateId) },
+          student: { id: parseInt(formData.studentId) },
+          points: points,
           comment: formData.comment,
+          status: 'GRADED',
         });
+        loadLabSubmissions();
+      } else if (modalType === 'gradeSubmission') {
+        const points = parseInt(formData.points);
+        const maxPoints = formData.labTemplate.maxPoints;
+        
+        if (points > maxPoints) {
+          alert(`Баллы не могут превышать максимальные баллы лабораторной работы (${maxPoints})`);
+          return;
+        }
+        
+        await teacherAPI.gradeLabSubmission(formData.id, {
+          ...formData,
+          points: points,
+          status: 'GRADED',
+        });
+        loadLabSubmissions();
       } else if (modalType === 'attendance') {
         await teacherAPI.addAttendance({
           student: { id: parseInt(formData.studentId) },
-          subject: { id: parseInt(formData.subjectId) },
+          subject: { id: selectedSubject.id },
           date: formData.date,
           present: formData.present === 'true',
           note: formData.note,
@@ -69,23 +165,17 @@ function TeacherDashboard({ user, onLogout }) {
       } else if (modalType === 'attestation') {
         await teacherAPI.addAttestation({
           student: { id: parseInt(formData.studentId) },
-          subject: { id: parseInt(formData.subjectId) },
+          subject: { id: selectedSubject.id },
           type: formData.type,
           passed: formData.passed === 'true',
           comment: formData.comment,
         });
-      } else if (modalType === 'subject') {
-        await teacherAPI.addSubject({
-          name: formData.name,
-          description: formData.description,
-          teacher: { id: user.userId },
-        });
       }
       closeModal();
-      loadData();
     } catch (error) {
       console.error('Error submitting form:', error);
-      alert('Ошибка при сохранении данных');
+      const errorMessage = error.response?.data || 'Ошибка при сохранении данных';
+      alert(errorMessage);
     }
   };
 
@@ -96,9 +186,22 @@ function TeacherDashboard({ user, onLogout }) {
     });
   };
 
+  const handleDeleteLabTemplate = async (id) => {
+    if (!window.confirm('Удалить шаблон лабораторной работы?')) return;
+    try {
+      await teacherAPI.deleteLabTemplate(id);
+      loadLabTemplates();
+    } catch (error) {
+      console.error('Error deleting lab template:', error);
+      alert('Ошибка при удалении');
+    }
+  };
+
   if (loading) {
     return <div className="loading">Загрузка данных...</div>;
   }
+
+  const isSubscribed = (subjectId) => mySubjects.some((s) => s.id === subjectId);
 
   return (
     <div className="dashboard">
@@ -125,16 +228,18 @@ function TeacherDashboard({ user, onLogout }) {
             <div className="stat-value">{students.length}</div>
           </div>
           <div className="card stat-card">
-            <div className="stat-label">Предметов</div>
-            <div className="stat-value">{subjects.length}</div>
+            <div className="stat-label">Моих предметов</div>
+            <div className="stat-value">{mySubjects.length}</div>
           </div>
           <div className="card stat-card">
-            <div className="stat-label">Активных курсов</div>
-            <div className="stat-value">{subjects.length}</div>
+            <div className="stat-label">Шаблонов лаб</div>
+            <div className="stat-value">{labTemplates.length}</div>
           </div>
           <div className="card stat-card">
-            <div className="stat-label">Всего записей</div>
-            <div className="stat-value">-</div>
+            <div className="stat-label">На проверке</div>
+            <div className="stat-value">
+              {labSubmissions.filter((s) => s.status === 'PENDING').length}
+            </div>
           </div>
         </div>
 
@@ -142,113 +247,265 @@ function TeacherDashboard({ user, onLogout }) {
         <div className="card">
           <div className="tabs">
             <button
-              className={`tab ${activeTab === 'grades' ? 'active' : ''}`}
-              onClick={() => setActiveTab('grades')}
+              className={`tab ${activeTab === 'subjects' ? 'active' : ''}`}
+              onClick={() => setActiveTab('subjects')}
             >
-              🎯 Оценки
+              📚 Предметы
             </button>
             <button
               className={`tab ${activeTab === 'labs' ? 'active' : ''}`}
               onClick={() => setActiveTab('labs')}
+              disabled={!selectedSubject}
             >
-              🧪 Лабораторные
+              🧪 Учебный план
+            </button>
+            <button
+              className={`tab ${activeTab === 'submissions' ? 'active' : ''}`}
+              onClick={() => setActiveTab('submissions')}
+              disabled={!selectedSubject}
+            >
+              📝 Выполнения
+            </button>
+            <button
+              className={`tab ${activeTab === 'grades' ? 'active' : ''}`}
+              onClick={() => setActiveTab('grades')}
+              disabled={!selectedSubject}
+            >
+              🎯 Оценки
             </button>
             <button
               className={`tab ${activeTab === 'attendance' ? 'active' : ''}`}
               onClick={() => setActiveTab('attendance')}
+              disabled={!selectedSubject}
             >
               📅 Посещаемость
             </button>
             <button
               className={`tab ${activeTab === 'attestations' ? 'active' : ''}`}
               onClick={() => setActiveTab('attestations')}
+              disabled={!selectedSubject}
             >
               📋 Аттестации
-            </button>
-            <button
-              className={`tab ${activeTab === 'subjects' ? 'active' : ''}`}
-              onClick={() => setActiveTab('subjects')}
-            >
-              📚 Предметы
             </button>
           </div>
 
           <div className="tab-content">
-            {activeTab === 'grades' && (
-              <div>
-                <button className="btn btn-primary" onClick={() => openModal('grade')}>
-                  + Добавить оценку
-                </button>
-                <p style={{ marginTop: '20px', color: '#64748b' }}>
-                  Нажмите кнопку выше, чтобы выставить оценку студенту
-                </p>
-              </div>
-            )}
-
-            {activeTab === 'labs' && (
-              <div>
-                <button className="btn btn-primary" onClick={() => openModal('lab')}>
-                  + Добавить лабораторную
-                </button>
-                <p style={{ marginTop: '20px', color: '#64748b' }}>
-                  Нажмите кнопку выше, чтобы добавить баллы за лабораторную работу
-                </p>
-              </div>
-            )}
-
-            {activeTab === 'attendance' && (
-              <div>
-                <button className="btn btn-primary" onClick={() => openModal('attendance')}>
-                  + Отметить посещение
-                </button>
-                <p style={{ marginTop: '20px', color: '#64748b' }}>
-                  Нажмите кнопку выше, чтобы отметить посещение занятия
-                </p>
-              </div>
-            )}
-
-            {activeTab === 'attestations' && (
-              <div>
-                <button className="btn btn-primary" onClick={() => openModal('attestation')}>
-                  + Добавить аттестацию
-                </button>
-                <p style={{ marginTop: '20px', color: '#64748b' }}>
-                  Нажмите кнопку выше, чтобы проставить аттестацию
-                </p>
-              </div>
-            )}
-
             {activeTab === 'subjects' && (
               <div>
-                <button className="btn btn-primary" onClick={() => openModal('subject')}>
-                  + Добавить предмет
-                </button>
-                {subjects.length > 0 && (
-                  <div className="table-container" style={{ marginTop: '20px' }}>
+                <h3 style={{ marginBottom: '15px' }}>Мои предметы</h3>
+                {mySubjects.length > 0 ? (
+                  <div className="subjects-grid">
+                    {mySubjects.map((subject) => (
+                      <div
+                        key={subject.id}
+                        className={`subject-card ${selectedSubject?.id === subject.id ? 'selected' : ''}`}
+                        onClick={() => setSelectedSubject(subject)}
+                      >
+                        <div className="subject-name">{subject.name}</div>
+                        <div className="subject-desc">{subject.description || 'Без описания'}</div>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUnsubscribe(subject.id);
+                          }}
+                        >
+                          Отписаться
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ color: '#64748b' }}>Вы не подписаны ни на один предмет</p>
+                )}
+
+                <h3 style={{ marginTop: '30px', marginBottom: '15px' }}>Все предметы</h3>
+                <div className="subjects-grid">
+                  {allSubjects.map((subject) => (
+                    <div key={subject.id} className="subject-card">
+                      <div className="subject-name">{subject.name}</div>
+                      <div className="subject-desc">{subject.description || 'Без описания'}</div>
+                      {isSubscribed(subject.id) ? (
+                        <span className="badge badge-success">✓ Подписан</span>
+                      ) : (
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleSubscribe(subject.id)}
+                        >
+                          Подписаться
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'labs' && selectedSubject && (
+              <div>
+                <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3>Учебный план: {selectedSubject.name}</h3>
+                  <button className="btn btn-primary" onClick={() => openModal('labTemplate')}>
+                    + Добавить лабу
+                  </button>
+                </div>
+
+                {labTemplates.length > 0 ? (
+                  <div className="table-container">
                     <table>
                       <thead>
                         <tr>
+                          <th>№</th>
                           <th>Название</th>
                           <th>Описание</th>
-                          <th>Преподаватель</th>
+                          <th>Макс. баллы</th>
+                          <th>Действия</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {subjects.map((subject) => (
-                          <tr key={subject.id}>
-                            <td>{subject.name}</td>
-                            <td>{subject.description || '-'}</td>
+                        {labTemplates.map((template) => (
+                          <tr key={template.id}>
+                            <td>{template.orderNumber}</td>
+                            <td>{template.title}</td>
+                            <td>{template.description || '-'}</td>
                             <td>
-                              {subject.teacher
-                                ? `${subject.teacher.firstName} ${subject.teacher.lastName}`
-                                : '-'}
+                              <span className="badge badge-info">{template.maxPoints}</span>
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => openModal('labTemplate', template)}
+                                style={{ marginRight: '5px' }}
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                className="btn btn-sm btn-danger"
+                                onClick={() => handleDeleteLabTemplate(template.id)}
+                              >
+                                🗑️
+                              </button>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                ) : (
+                  <p style={{ color: '#64748b' }}>Нет лабораторных работ в учебном плане</p>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'submissions' && selectedSubject && (
+              <div>
+                <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3>Выполнения студентов: {selectedSubject.name}</h3>
+                  <button className="btn btn-primary" onClick={() => openModal('labSubmission')}>
+                    + Оценить работу
+                  </button>
+                </div>
+
+                {labSubmissions.length > 0 ? (
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Студент</th>
+                          <th>Лабораторная</th>
+                          <th>Баллы</th>
+                          <th>Статус</th>
+                          <th>Комментарий</th>
+                          <th>Дата сдачи</th>
+                          <th>Действия</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {labSubmissions.map((submission) => (
+                          <tr key={submission.id}>
+                            <td>
+                              {submission.student
+                                ? `${submission.student.firstName} ${submission.student.lastName}`
+                                : '-'}
+                            </td>
+                            <td>{submission.labTemplate?.title || '-'}</td>
+                            <td>
+                              <span className="badge badge-success">
+                                {submission.points}/{submission.labTemplate?.maxPoints || 0}
+                              </span>
+                            </td>
+                            <td>
+                              <span
+                                className={`badge ${
+                                  submission.status === 'GRADED'
+                                    ? 'badge-success'
+                                    : submission.status === 'PENDING'
+                                    ? 'badge-warning'
+                                    : 'badge-danger'
+                                }`}
+                              >
+                                {submission.status === 'GRADED'
+                                  ? 'Оценено'
+                                  : submission.status === 'PENDING'
+                                  ? 'На проверке'
+                                  : 'Отклонено'}
+                              </span>
+                            </td>
+                            <td>{submission.comment || '-'}</td>
+                            <td>
+                              {submission.submittedAt
+                                ? new Date(submission.submittedAt).toLocaleDateString()
+                                : '-'}
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => openModal('gradeSubmission', submission)}
+                              >
+                                Оценить
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p style={{ color: '#64748b' }}>Нет выполненных работ</p>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'grades' && selectedSubject && (
+              <div>
+                <button className="btn btn-primary" onClick={() => openModal('grade')}>
+                  + Добавить оценку
+                </button>
+                <p style={{ marginTop: '20px', color: '#64748b' }}>
+                  Предмет: {selectedSubject.name}
+                </p>
+              </div>
+            )}
+
+            {activeTab === 'attendance' && selectedSubject && (
+              <div>
+                <button className="btn btn-primary" onClick={() => openModal('attendance')}>
+                  + Отметить посещение
+                </button>
+                <p style={{ marginTop: '20px', color: '#64748b' }}>
+                  Предмет: {selectedSubject.name}
+                </p>
+              </div>
+            )}
+
+            {activeTab === 'attestations' && selectedSubject && (
+              <div>
+                <button className="btn btn-primary" onClick={() => openModal('attestation')}>
+                  + Добавить аттестацию
+                </button>
+                <p style={{ marginTop: '20px', color: '#64748b' }}>
+                  Предмет: {selectedSubject.name}
+                </p>
               </div>
             )}
           </div>
@@ -270,7 +527,6 @@ function TeacherDashboard({ user, onLogout }) {
                     <th>ФИО</th>
                     <th>Email</th>
                     <th>Группа</th>
-                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -281,11 +537,6 @@ function TeacherDashboard({ user, onLogout }) {
                       </td>
                       <td>{student.email}</td>
                       <td>{student.studentGroup || '-'}</td>
-                      <td>
-                        <button className="btn btn-sm btn-primary">
-                          Просмотр данных
-                        </button>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -306,23 +557,149 @@ function TeacherDashboard({ user, onLogout }) {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               {modalType === 'grade' && 'Добавить оценку'}
-              {modalType === 'lab' && 'Добавить лабораторную работу'}
+              {modalType === 'labTemplate' && (formData.id ? 'Редактировать лабу' : 'Добавить лабу')}
+              {modalType === 'labSubmission' && 'Оценить работу студента'}
+              {modalType === 'gradeSubmission' && 'Изменить оценку'}
               {modalType === 'attendance' && 'Отметить посещение'}
               {modalType === 'attestation' && 'Добавить аттестацию'}
-              {modalType === 'subject' && 'Добавить предмет'}
             </div>
 
             <form onSubmit={handleSubmit}>
-              {modalType !== 'subject' && (
+              {modalType === 'labTemplate' && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Порядковый номер</label>
+                    <input
+                      type="number"
+                      name="orderNumber"
+                      className="form-control"
+                      min="1"
+                      value={formData.orderNumber || ''}
+                      required
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Название</label>
+                    <input
+                      type="text"
+                      name="title"
+                      className="form-control"
+                      value={formData.title || ''}
+                      required
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Описание</label>
+                    <textarea
+                      name="description"
+                      className="form-control"
+                      rows="3"
+                      value={formData.description || ''}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Максимальные баллы</label>
+                    <input
+                      type="number"
+                      name="maxPoints"
+                      className="form-control"
+                      min="1"
+                      value={formData.maxPoints || ''}
+                      required
+                      onChange={handleChange}
+                    />
+                  </div>
+                </>
+              )}
+
+              {(modalType === 'labSubmission' || modalType === 'gradeSubmission') && (
+                <>
+                  {modalType === 'labSubmission' && (
+                    <>
+                      <div className="form-group">
+                        <label className="form-label">Студент</label>
+                        <select
+                          name="studentId"
+                          className="form-select"
+                          required
+                          onChange={handleChange}
+                        >
+                          <option value="">Выберите студента</option>
+                          {students.map((student) => (
+                            <option key={student.id} value={student.id}>
+                              {student.firstName} {student.lastName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Лабораторная работа</label>
+                        <select
+                          name="labTemplateId"
+                          className="form-select"
+                          required
+                          onChange={handleChange}
+                        >
+                          <option value="">Выберите лабу</option>
+                          {labTemplates.map((template) => (
+                            <option key={template.id} value={template.id}>
+                              {template.title} (макс. {template.maxPoints} баллов)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                  <div className="form-group">
+                    <label className="form-label">
+                      Баллы
+                      {modalType === 'gradeSubmission' && formData.labTemplate && (
+                        <span style={{ color: '#64748b', fontSize: '12px', marginLeft: '8px' }}>
+                          (макс. {formData.labTemplate.maxPoints})
+                        </span>
+                      )}
+                      {modalType === 'labSubmission' && formData.labTemplateId && (
+                        <span style={{ color: '#64748b', fontSize: '12px', marginLeft: '8px' }}>
+                          (макс. {labTemplates.find(t => t.id === parseInt(formData.labTemplateId))?.maxPoints})
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="number"
+                      name="points"
+                      className="form-control"
+                      min="0"
+                      max={
+                        modalType === 'gradeSubmission' 
+                          ? formData.labTemplate?.maxPoints 
+                          : labTemplates.find(t => t.id === parseInt(formData.labTemplateId))?.maxPoints
+                      }
+                      value={formData.points || ''}
+                      required
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Комментарий</label>
+                    <textarea
+                      name="comment"
+                      className="form-control"
+                      rows="3"
+                      value={formData.comment || ''}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </>
+              )}
+
+              {modalType === 'grade' && (
                 <>
                   <div className="form-group">
                     <label className="form-label">Студент</label>
-                    <select
-                      name="studentId"
-                      className="form-select"
-                      required
-                      onChange={handleChange}
-                    >
+                    <select name="studentId" className="form-select" required onChange={handleChange}>
                       <option value="">Выберите студента</option>
                       {students.map((student) => (
                         <option key={student.id} value={student.id}>
@@ -331,28 +708,6 @@ function TeacherDashboard({ user, onLogout }) {
                       ))}
                     </select>
                   </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Предмет</label>
-                    <select
-                      name="subjectId"
-                      className="form-select"
-                      required
-                      onChange={handleChange}
-                    >
-                      <option value="">Выберите предмет</option>
-                      {subjects.map((subject) => (
-                        <option key={subject.id} value={subject.id}>
-                          {subject.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-
-              {modalType === 'grade' && (
-                <>
                   <div className="form-group">
                     <label className="form-label">Оценка</label>
                     <input
@@ -367,47 +722,7 @@ function TeacherDashboard({ user, onLogout }) {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Описание</label>
-                    <input
-                      type="text"
-                      name="description"
-                      className="form-control"
-                      onChange={handleChange}
-                    />
-                  </div>
-                </>
-              )}
-
-              {modalType === 'lab' && (
-                <>
-                  <div className="form-group">
-                    <label className="form-label">Название</label>
-                    <input
-                      type="text"
-                      name="title"
-                      className="form-control"
-                      required
-                      onChange={handleChange}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Баллы</label>
-                    <input
-                      type="number"
-                      name="points"
-                      className="form-control"
-                      min="0"
-                      required
-                      onChange={handleChange}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Комментарий</label>
-                    <input
-                      type="text"
-                      name="comment"
-                      className="form-control"
-                      onChange={handleChange}
-                    />
+                    <input type="text" name="description" className="form-control" onChange={handleChange} />
                   </div>
                 </>
               )}
@@ -415,14 +730,19 @@ function TeacherDashboard({ user, onLogout }) {
               {modalType === 'attendance' && (
                 <>
                   <div className="form-group">
+                    <label className="form-label">Студент</label>
+                    <select name="studentId" className="form-select" required onChange={handleChange}>
+                      <option value="">Выберите студента</option>
+                      {students.map((student) => (
+                        <option key={student.id} value={student.id}>
+                          {student.firstName} {student.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
                     <label className="form-label">Дата</label>
-                    <input
-                      type="date"
-                      name="date"
-                      className="form-control"
-                      required
-                      onChange={handleChange}
-                    />
+                    <input type="date" name="date" className="form-control" required onChange={handleChange} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Присутствие</label>
@@ -434,18 +754,24 @@ function TeacherDashboard({ user, onLogout }) {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Примечание</label>
-                    <input
-                      type="text"
-                      name="note"
-                      className="form-control"
-                      onChange={handleChange}
-                    />
+                    <input type="text" name="note" className="form-control" onChange={handleChange} />
                   </div>
                 </>
               )}
 
               {modalType === 'attestation' && (
                 <>
+                  <div className="form-group">
+                    <label className="form-label">Студент</label>
+                    <select name="studentId" className="form-select" required onChange={handleChange}>
+                      <option value="">Выберите студента</option>
+                      {students.map((student) => (
+                        <option key={student.id} value={student.id}>
+                          {student.firstName} {student.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="form-group">
                     <label className="form-label">Тип аттестации</label>
                     <select name="type" className="form-select" required onChange={handleChange}>
@@ -465,36 +791,7 @@ function TeacherDashboard({ user, onLogout }) {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Комментарий</label>
-                    <input
-                      type="text"
-                      name="comment"
-                      className="form-control"
-                      onChange={handleChange}
-                    />
-                  </div>
-                </>
-              )}
-
-              {modalType === 'subject' && (
-                <>
-                  <div className="form-group">
-                    <label className="form-label">Название предмета</label>
-                    <input
-                      type="text"
-                      name="name"
-                      className="form-control"
-                      required
-                      onChange={handleChange}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Описание</label>
-                    <input
-                      type="text"
-                      name="description"
-                      className="form-control"
-                      onChange={handleChange}
-                    />
+                    <input type="text" name="comment" className="form-control" onChange={handleChange} />
                   </div>
                 </>
               )}
@@ -531,7 +828,7 @@ function TeacherDashboard({ user, onLogout }) {
           color: #64748b;
         }
 
-        .tab:hover {
+        .tab:hover:not(:disabled) {
           background: #f1f5f9;
           border-color: #cbd5e1;
         }
@@ -542,8 +839,56 @@ function TeacherDashboard({ user, onLogout }) {
           border-color: transparent;
         }
 
+        .tab:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
         .tab-content {
           padding: 20px 0;
+        }
+
+        .subjects-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 15px;
+          margin-top: 15px;
+        }
+
+        .subject-card {
+          padding: 20px;
+          border: 2px solid #e2e8f0;
+          border-radius: 12px;
+          transition: all 0.2s;
+          cursor: pointer;
+        }
+
+        .subject-card:hover {
+          border-color: var(--primary);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        .subject-card.selected {
+          border-color: var(--primary);
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
+        }
+
+        .subject-name {
+          font-weight: 700;
+          font-size: 16px;
+          margin-bottom: 8px;
+          color: var(--dark);
+        }
+
+        .subject-desc {
+          font-size: 14px;
+          color: #64748b;
+          margin-bottom: 12px;
+          min-height: 40px;
+        }
+
+        textarea.form-control {
+          resize: vertical;
         }
       `}</style>
     </div>
@@ -551,9 +896,3 @@ function TeacherDashboard({ user, onLogout }) {
 }
 
 export default TeacherDashboard;
-
-
-
-
-
-

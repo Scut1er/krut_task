@@ -193,18 +193,32 @@ function StudentDashboard({ user, onLogout }) {
                   <thead>
                     <tr>
                       <th>Название</th>
-                      <th>Баллы</th>
                       <th>Предмет</th>
+                      <th>Баллы</th>
+                      <th>Статус</th>
+                      <th>Комментарий</th>
                     </tr>
                   </thead>
                   <tbody>
                     {labs.map((lab) => (
                       <tr key={lab.id}>
-                        <td>{lab.title}</td>
+                        <td>{lab.labTemplate?.title || 'N/A'}</td>
+                        <td>{lab.labTemplate?.subject?.name || 'N/A'}</td>
                         <td>
-                          <span className="badge badge-success">+{lab.points}</span>
+                          <span className="badge badge-success">
+                            {lab.points}/{lab.labTemplate?.maxPoints || 0}
+                          </span>
                         </td>
-                        <td>{lab.subject?.name || 'N/A'}</td>
+                        <td>
+                          <span className={`badge ${
+                            lab.status === 'GRADED' ? 'badge-success' : 
+                            lab.status === 'PENDING' ? 'badge-warning' : 'badge-danger'
+                          }`}>
+                            {lab.status === 'GRADED' ? 'Оценено' : 
+                             lab.status === 'PENDING' ? 'На проверке' : 'Отклонено'}
+                          </span>
+                        </td>
+                        <td>{lab.comment || '-'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -311,8 +325,3 @@ function StudentDashboard({ user, onLogout }) {
 }
 
 export default StudentDashboard;
-
-
-
-
-

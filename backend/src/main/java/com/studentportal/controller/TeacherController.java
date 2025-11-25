@@ -5,6 +5,7 @@ import com.studentportal.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,9 +20,6 @@ public class TeacherController {
     private GradeRepository gradeRepository;
     
     @Autowired
-    private LabRepository labRepository;
-    
-    @Autowired
     private AttendanceRepository attendanceRepository;
     
     @Autowired
@@ -32,6 +30,15 @@ public class TeacherController {
     
     @Autowired
     private SubjectRepository subjectRepository;
+    
+    @Autowired
+    private LabTemplateRepository labTemplateRepository;
+    
+    @Autowired
+    private LabSubmissionRepository labSubmissionRepository;
+    
+    @Autowired
+    private TeacherSubjectRepository teacherSubjectRepository;
     
     @GetMapping("/students")
     public ResponseEntity<List<User>> getAllStudents() {
@@ -58,23 +65,103 @@ public class TeacherController {
         return ResponseEntity.ok().build();
     }
     
-    @PostMapping("/labs")
-    public ResponseEntity<Lab> addLab(@RequestBody Lab lab) {
-        Lab savedLab = labRepository.save(lab);
-        return ResponseEntity.ok(savedLab);
-    }
-    
-    @PutMapping("/labs/{id}")
-    public ResponseEntity<Lab> updateLab(@PathVariable Long id, @RequestBody Lab lab) {
-        lab.setId(id);
-        Lab updatedLab = labRepository.save(lab);
-        return ResponseEntity.ok(updatedLab);
-    }
-    
-    @DeleteMapping("/labs/{id}")
-    public ResponseEntity<?> deleteLab(@PathVariable Long id) {
-        labRepository.deleteById(id);
+    // Subject Subscription Management
+    @PostMapping("/subjects/{subjectId}/subscribe")
+    public ResponseEntity<?> subscribeToSubject(@PathVariable Long subjectId, @RequestParam Long teacherId) {
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> new RuntimeException("Teacher not found"));
+        Subject subject = subjectRepository.findById(subjectId)
+                .orElseThrow(() -> new RuntimeException("Subject not found"));
+        
+        if (teacherSubjectRepository.findByTeacherIdAndSubjectId(teacherId, subjectId).isEmpty()) {
+            TeacherSubject teacherSubject = new TeacherSubject(teacher, subject);
+            teacherSubjectRepository.save(teacherSubject);
+        }
         return ResponseEntity.ok().build();
+    }
+    
+    @DeleteMapping("/subjects/{subjectId}/unsubscribe")
+    @Transactional
+    public ResponseEntity<?> unsubscribeFromSubject(@PathVariable Long subjectId, @RequestParam Long teacherId) {
+        teacherSubjectRepository.deleteByTeacherIdAndSubjectId(teacherId, subjectId);
+        return ResponseEntity.ok().build();
+    }
+    
+    @GetMapping("/subjects/my")
+    public ResponseEntity<?> getMySubjects(@RequestParam Long teacherId) {
+        List<Subject> subjects = teacherSubjectRepository.findSubjectsByTeacherId(teacherId);
+        return ResponseEntity.ok(subjects);
+    }
+    
+    // Lab Templates Management
+    @PostMapping("/lab-templates")
+    public ResponseEntity<LabTemplate> createLabTemplate(@RequestBody LabTemplate labTemplate) {
+        LabTemplate savedLabTemplate = labTemplateRepository.save(labTemplate);
+        return ResponseEntity.ok(savedLabTemplate);
+    }
+    
+    @GetMapping("/lab-templates/subject/{subjectId}")
+    public ResponseEntity<List<LabTemplate>> getLabTemplatesBySubject(@PathVariable Long subjectId) {
+        return ResponseEntity.ok(labTemplateRepository.findBySubject_IdOrderByOrderNumberAsc(subjectId));
+    }
+    
+    @PutMapping("/lab-templates/{id}")
+    public ResponseEntity<LabTemplate> updateLabTemplate(@PathVariable Long id, @RequestBody LabTemplate labTemplate) {
+        labTemplate.setId(id);
+        LabTemplate updatedLabTemplate = labTemplateRepository.save(labTemplate);
+        return ResponseEntity.ok(updatedLabTemplate);
+    }
+    
+    @DeleteMapping("/lab-templates/{id}")
+    public ResponseEntity<?> deleteLabTemplate(@PathVariable Long id) {
+        labTemplateRepository.deleteById(id);
+        return ResponseEntity.ok().build();
+    }
+    
+    // Lab Submissions Grading
+    @GetMapping("/lab-submissions/subject/{subjectId}")
+    public ResponseEntity<List<LabSubmission>> getLabSubmissionsBySubject(@PathVariable Long subjectId) {
+        return ResponseEntity.ok(labSubmissionRepository.findAll().stream()
+                .filter(sub -> sub.getLabTemplate().getSubject().getId().equals(subjectId))
+                .toList());
+    }
+    
+    @PostMapping("/lab-submissions")
+    public ResponseEntity<?> createLabSubmission(@RequestBody LabSubmission labSubmission) {
+        // Validate points
+        if (labSubmission.getPoints() > labSubmission.getLabTemplate().getMaxPoints()) {
+            return ResponseEntity.badRequest().body("Баллы не могут превышать максимальные баллы лабораторной работы (" + 
+                labSubmission.getLabTemplate().getMaxPoints() + ")");
+        }
+        if (labSubmission.getPoints() < 0) {
+            return ResponseEntity.badRequest().body("Баллы не могут быть отрицательными");
+        }
+        
+        LabSubmission savedLabSubmission = labSubmissionRepository.save(labSubmission);
+        return ResponseEntity.ok(savedLabSubmission);
+    }
+    
+    @PutMapping("/lab-submissions/{id}")
+    public ResponseEntity<?> gradeLabSubmission(@PathVariable Long id, @RequestBody LabSubmission labSubmission) {
+        LabSubmission existing = labSubmissionRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Lab submission not found"));
+        
+        // Validate points
+        Integer maxPoints = existing.getLabTemplate().getMaxPoints();
+        if (labSubmission.getPoints() > maxPoints) {
+            return ResponseEntity.badRequest().body("Баллы не могут превышать максимальные баллы лабораторной работы (" + maxPoints + ")");
+        }
+        if (labSubmission.getPoints() < 0) {
+            return ResponseEntity.badRequest().body("Баллы не могут быть отрицательными");
+        }
+        
+        existing.setPoints(labSubmission.getPoints());
+        existing.setComment(labSubmission.getComment());
+        existing.setStatus(labSubmission.getStatus());
+        existing.setGradedAt(java.time.LocalDateTime.now());
+        
+        LabSubmission updatedLabSubmission = labSubmissionRepository.save(existing);
+        return ResponseEntity.ok(updatedLabSubmission);
     }
     
     @PostMapping("/attendance")
@@ -113,12 +200,6 @@ public class TeacherController {
     public ResponseEntity<?> deleteAttestation(@PathVariable Long id) {
         attestationRepository.deleteById(id);
         return ResponseEntity.ok().build();
-    }
-    
-    @PostMapping("/subjects")
-    public ResponseEntity<Subject> addSubject(@RequestBody Subject subject) {
-        Subject savedSubject = subjectRepository.save(subject);
-        return ResponseEntity.ok(savedSubject);
     }
     
     @GetMapping("/subjects")

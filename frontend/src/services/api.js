@@ -25,6 +25,8 @@ export const authAPI = {
 export const studentAPI = {
   getGrades: (studentId) => api.get(`/student/${studentId}/grades`),
   getLabs: (studentId) => api.get(`/student/${studentId}/labs`),
+  getLabTemplates: (studentId) => api.get(`/student/${studentId}/lab-templates`),
+  getLabTemplatesBySubject: (studentId, subjectId) => api.get(`/student/${studentId}/lab-templates/subject/${subjectId}`),
   getAttendance: (studentId) => api.get(`/student/${studentId}/attendance`),
   getAttestations: (studentId) => api.get(`/student/${studentId}/attestations`),
   getTeachers: () => api.get('/student/teachers'),
@@ -35,15 +37,24 @@ export const studentAPI = {
 export const teacherAPI = {
   getStudents: () => api.get('/teacher/students'),
   getSubjects: () => api.get('/teacher/subjects'),
-  addSubject: (subject) => api.post('/teacher/subjects', subject),
+  getMySubjects: (teacherId) => api.get('/teacher/subjects/my', { params: { teacherId } }),
+  subscribeToSubject: (subjectId, teacherId) => api.post(`/teacher/subjects/${subjectId}/subscribe`, null, { params: { teacherId } }),
+  unsubscribeFromSubject: (subjectId, teacherId) => api.delete(`/teacher/subjects/${subjectId}/unsubscribe`, { params: { teacherId } }),
   
   addGrade: (grade) => api.post('/teacher/grades', grade),
   updateGrade: (id, grade) => api.put(`/teacher/grades/${id}`, grade),
   deleteGrade: (id) => api.delete(`/teacher/grades/${id}`),
   
-  addLab: (lab) => api.post('/teacher/labs', lab),
-  updateLab: (id, lab) => api.put(`/teacher/labs/${id}`, lab),
-  deleteLab: (id) => api.delete(`/teacher/labs/${id}`),
+  // Lab Templates
+  createLabTemplate: (labTemplate) => api.post('/teacher/lab-templates', labTemplate),
+  getLabTemplatesBySubject: (subjectId) => api.get(`/teacher/lab-templates/subject/${subjectId}`),
+  updateLabTemplate: (id, labTemplate) => api.put(`/teacher/lab-templates/${id}`, labTemplate),
+  deleteLabTemplate: (id) => api.delete(`/teacher/lab-templates/${id}`),
+  
+  // Lab Submissions
+  getLabSubmissionsBySubject: (subjectId) => api.get(`/teacher/lab-submissions/subject/${subjectId}`),
+  createLabSubmission: (labSubmission) => api.post('/teacher/lab-submissions', labSubmission),
+  gradeLabSubmission: (id, labSubmission) => api.put(`/teacher/lab-submissions/${id}`, labSubmission),
   
   addAttendance: (attendance) => api.post('/teacher/attendance', attendance),
   updateAttendance: (id, attendance) => api.put(`/teacher/attendance/${id}`, attendance),
@@ -72,10 +83,18 @@ export const adminAPI = {
   updateGrade: (id, grade) => api.put(`/admin/grades/${id}`, grade),
   deleteGrade: (id) => api.delete(`/admin/grades/${id}`),
   
-  // Labs
-  getLabs: () => api.get('/admin/labs'),
-  updateLab: (id, lab) => api.put(`/admin/labs/${id}`, lab),
-  deleteLab: (id) => api.delete(`/admin/labs/${id}`),
+  // Lab Templates
+  getLabTemplates: () => api.get('/admin/lab-templates'),
+  getLabTemplatesBySubject: (subjectId) => api.get(`/admin/lab-templates/subject/${subjectId}`),
+  createLabTemplate: (labTemplate) => api.post('/admin/lab-templates', labTemplate),
+  updateLabTemplate: (id, labTemplate) => api.put(`/admin/lab-templates/${id}`, labTemplate),
+  deleteLabTemplate: (id) => api.delete(`/admin/lab-templates/${id}`),
+  
+  // Lab Submissions
+  getLabSubmissions: () => api.get('/admin/lab-submissions'),
+  getLabSubmissionsByStudent: (studentId) => api.get(`/admin/lab-submissions/student/${studentId}`),
+  updateLabSubmission: (id, labSubmission) => api.put(`/admin/lab-submissions/${id}`, labSubmission),
+  deleteLabSubmission: (id) => api.delete(`/admin/lab-submissions/${id}`),
   
   // Attendance
   getAttendance: () => api.get('/admin/attendance'),

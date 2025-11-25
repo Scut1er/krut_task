@@ -1,17 +1,11 @@
 package com.studentportal.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "attestations")
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
 public class Attestation {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -48,10 +42,73 @@ public class Attestation {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
+
+    public Attestation() {
+    }
+
+    public Attestation(Long id, User student, Subject subject, AttestationType type, Boolean passed, String comment, LocalDateTime createdAt) {
+        this.id = id;
+        this.student = student;
+        this.subject = subject;
+        this.type = type;
+        this.passed = passed;
+        this.comment = comment;
+        this.createdAt = createdAt;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public User getStudent() {
+        return student;
+    }
+
+    public void setStudent(User student) {
+        this.student = student;
+    }
+
+    public Subject getSubject() {
+        return subject;
+    }
+
+    public void setSubject(Subject subject) {
+        this.subject = subject;
+    }
+
+    public AttestationType getType() {
+        return type;
+    }
+
+    public void setType(AttestationType type) {
+        this.type = type;
+    }
+
+    public Boolean getPassed() {
+        return passed;
+    }
+
+    public void setPassed(Boolean passed) {
+        this.passed = passed;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
 }
-
-
-
-
-
-

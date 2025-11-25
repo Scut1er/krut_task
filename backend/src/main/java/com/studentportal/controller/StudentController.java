@@ -20,7 +20,10 @@ public class StudentController {
     private GradeRepository gradeRepository;
     
     @Autowired
-    private LabRepository labRepository;
+    private LabSubmissionRepository labSubmissionRepository;
+    
+    @Autowired
+    private LabTemplateRepository labTemplateRepository;
     
     @Autowired
     private AttendanceRepository attendanceRepository;
@@ -43,9 +46,21 @@ public class StudentController {
     
     @GetMapping("/{studentId}/labs")
     @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER')")
-    public ResponseEntity<List<Lab>> getLabs(@PathVariable Long studentId) {
-        List<Lab> labs = labRepository.findByStudentId(studentId);
+    public ResponseEntity<List<LabSubmission>> getLabs(@PathVariable Long studentId) {
+        List<LabSubmission> labs = labSubmissionRepository.findByStudentId(studentId);
         return ResponseEntity.ok(labs);
+    }
+    
+    @GetMapping("/{studentId}/lab-templates")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER')")
+    public ResponseEntity<List<LabTemplate>> getLabTemplates(@PathVariable Long studentId) {
+        return ResponseEntity.ok(labTemplateRepository.findAll());
+    }
+    
+    @GetMapping("/{studentId}/lab-templates/subject/{subjectId}")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER')")
+    public ResponseEntity<List<LabTemplate>> getLabTemplatesBySubject(@PathVariable Long studentId, @PathVariable Long subjectId) {
+        return ResponseEntity.ok(labTemplateRepository.findBySubject_IdOrderByOrderNumberAsc(subjectId));
     }
     
     @GetMapping("/{studentId}/attendance")
@@ -75,7 +90,7 @@ public class StudentController {
         Map<String, Object> dashboard = new HashMap<>();
         
         List<Grade> grades = gradeRepository.findByStudentId(studentId);
-        List<Lab> labs = labRepository.findByStudentId(studentId);
+        List<LabSubmission> labs = labSubmissionRepository.findByStudentId(studentId);
         List<Attendance> attendance = attendanceRepository.findByStudentId(studentId);
         List<Attestation> attestations = attestationRepository.findByStudentId(studentId);
         
@@ -87,7 +102,7 @@ public class StudentController {
         
         int totalLabs = labs.size();
         int totalPoints = labs.stream()
-                .mapToInt(Lab::getPoints)
+                .mapToInt(LabSubmission::getPoints)
                 .sum();
         
         long totalClasses = attendance.size();

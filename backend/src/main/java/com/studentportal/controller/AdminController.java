@@ -9,6 +9,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -23,7 +24,10 @@ public class AdminController {
     private GradeRepository gradeRepository;
     
     @Autowired
-    private LabRepository labRepository;
+    private LabTemplateRepository labTemplateRepository;
+    
+    @Autowired
+    private LabSubmissionRepository labSubmissionRepository;
     
     @Autowired
     private AttendanceRepository attendanceRepository;
@@ -120,22 +124,57 @@ public class AdminController {
         return ResponseEntity.ok().build();
     }
     
-    // Labs Management
-    @GetMapping("/labs")
-    public ResponseEntity<List<Lab>> getAllLabs() {
-        return ResponseEntity.ok(labRepository.findAll());
+    // Lab Templates Management
+    @GetMapping("/lab-templates")
+    public ResponseEntity<List<LabTemplate>> getAllLabTemplates() {
+        return ResponseEntity.ok(labTemplateRepository.findAll());
     }
     
-    @PutMapping("/labs/{id}")
-    public ResponseEntity<Lab> updateLab(@PathVariable Long id, @RequestBody Lab lab) {
-        lab.setId(id);
-        Lab updatedLab = labRepository.save(lab);
-        return ResponseEntity.ok(updatedLab);
+    @GetMapping("/lab-templates/subject/{subjectId}")
+    public ResponseEntity<List<LabTemplate>> getLabTemplatesBySubject(@PathVariable Long subjectId) {
+        return ResponseEntity.ok(labTemplateRepository.findBySubject_IdOrderByOrderNumberAsc(subjectId));
     }
     
-    @DeleteMapping("/labs/{id}")
-    public ResponseEntity<?> deleteLab(@PathVariable Long id) {
-        labRepository.deleteById(id);
+    @PostMapping("/lab-templates")
+    public ResponseEntity<LabTemplate> createLabTemplate(@RequestBody LabTemplate labTemplate) {
+        LabTemplate savedLabTemplate = labTemplateRepository.save(labTemplate);
+        return ResponseEntity.ok(savedLabTemplate);
+    }
+    
+    @PutMapping("/lab-templates/{id}")
+    public ResponseEntity<LabTemplate> updateLabTemplate(@PathVariable Long id, @RequestBody LabTemplate labTemplate) {
+        labTemplate.setId(id);
+        LabTemplate updatedLabTemplate = labTemplateRepository.save(labTemplate);
+        return ResponseEntity.ok(updatedLabTemplate);
+    }
+    
+    @DeleteMapping("/lab-templates/{id}")
+    public ResponseEntity<?> deleteLabTemplate(@PathVariable Long id) {
+        labTemplateRepository.deleteById(id);
+        return ResponseEntity.ok().build();
+    }
+    
+    // Lab Submissions Management
+    @GetMapping("/lab-submissions")
+    public ResponseEntity<List<LabSubmission>> getAllLabSubmissions() {
+        return ResponseEntity.ok(labSubmissionRepository.findAll());
+    }
+    
+    @GetMapping("/lab-submissions/student/{studentId}")
+    public ResponseEntity<List<LabSubmission>> getLabSubmissionsByStudent(@PathVariable Long studentId) {
+        return ResponseEntity.ok(labSubmissionRepository.findByStudentId(studentId));
+    }
+    
+    @PutMapping("/lab-submissions/{id}")
+    public ResponseEntity<LabSubmission> updateLabSubmission(@PathVariable Long id, @RequestBody LabSubmission labSubmission) {
+        labSubmission.setId(id);
+        LabSubmission updatedLabSubmission = labSubmissionRepository.save(labSubmission);
+        return ResponseEntity.ok(updatedLabSubmission);
+    }
+    
+    @DeleteMapping("/lab-submissions/{id}")
+    public ResponseEntity<?> deleteLabSubmission(@PathVariable Long id) {
+        labSubmissionRepository.deleteById(id);
         return ResponseEntity.ok().build();
     }
     
