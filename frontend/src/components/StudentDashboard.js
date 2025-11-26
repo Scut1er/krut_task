@@ -69,11 +69,15 @@ function StudentDashboard({ user, onLogout }) {
           </div>
           <div className="card stat-card">
             <div className="stat-label">Лабораторных</div>
-            <div className="stat-value">{dashboard?.totalLabs || 0}</div>
+            <div className="stat-value">
+              {dashboard?.completedLabs || 0} / {dashboard?.totalLabs || 0}
+            </div>
           </div>
           <div className="card stat-card">
             <div className="stat-label">Баллов за лабы</div>
-            <div className="stat-value">{dashboard?.totalPoints || 0}</div>
+            <div className="stat-value">
+              {dashboard?.earnedPoints || 0} / {dashboard?.maxPossiblePoints || 0}
+            </div>
           </div>
           <div className="card stat-card">
             <div className="stat-label">Посещаемость</div>

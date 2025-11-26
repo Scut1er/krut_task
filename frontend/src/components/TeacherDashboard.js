@@ -8,7 +8,8 @@ function TeacherDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('subjects');
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [labTemplates, setLabTemplates] = useState([]);
-  const [labSubmissions, setLabSubmissions] = useState([]);
+  const [selectedSubjectLabTemplates, setSelectedSubjectLabTemplates] = useState([]);
+  const [attestations, setAttestations] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [formData, setFormData] = useState({});
@@ -22,9 +23,6 @@ function TeacherDashboard({ user, onLogout }) {
     if (selectedSubject && activeTab === 'labs') {
       loadLabTemplates();
     }
-    if (selectedSubject && activeTab === 'submissions') {
-      loadLabSubmissions();
-    }
   }, [selectedSubject, activeTab]);
 
   const loadData = async () => {
@@ -37,6 +35,12 @@ function TeacherDashboard({ user, onLogout }) {
       setStudents(studentsRes.data);
       setAllSubjects(subjectsRes.data);
       setMySubjects(mySubjectsRes.data);
+      
+      // Load all lab templates for active courses
+      await loadAllLabTemplatesForMyCourses(mySubjectsRes.data);
+      
+      // Load attestations for all students
+      await loadAttestations(studentsRes.data);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -44,30 +48,47 @@ function TeacherDashboard({ user, onLogout }) {
     }
   };
 
-  const loadLabTemplates = async () => {
-    if (!selectedSubject) return;
+  const loadAttestations = async (studentsList) => {
     try {
-      const res = await teacherAPI.getLabTemplatesBySubject(selectedSubject.id);
-      setLabTemplates(res.data);
+      const allAttestations = [];
+      for (const student of studentsList) {
+        const res = await studentAPI.getAttestations(student.id);
+        allAttestations.push(...res.data);
+      }
+      setAttestations(allAttestations);
+    } catch (error) {
+      console.error('Error loading attestations:', error);
+    }
+  };
+
+  const loadAllLabTemplatesForMyCourses = async (subjects) => {
+    try {
+      const allTemplates = await Promise.all(
+        subjects.map(subject => teacherAPI.getLabTemplatesBySubject(subject.id))
+      );
+      const flatTemplates = allTemplates.flatMap(res => res.data);
+      setLabTemplates(flatTemplates);
     } catch (error) {
       console.error('Error loading lab templates:', error);
     }
   };
 
-  const loadLabSubmissions = async () => {
+  const loadLabTemplates = async () => {
     if (!selectedSubject) return;
     try {
-      const res = await teacherAPI.getLabSubmissionsBySubject(selectedSubject.id);
-      setLabSubmissions(res.data);
+      const res = await teacherAPI.getLabTemplatesBySubject(selectedSubject.id);
+      setSelectedSubjectLabTemplates(res.data);
     } catch (error) {
-      console.error('Error loading lab submissions:', error);
+      console.error('Error loading lab templates:', error);
     }
   };
 
   const handleSubscribe = async (subjectId) => {
     try {
       await teacherAPI.subscribeToSubject(subjectId, user.userId);
-      loadData();
+      const mySubjectsRes = await teacherAPI.getMySubjects(user.userId);
+      setMySubjects(mySubjectsRes.data);
+      await loadAllLabTemplatesForMyCourses(mySubjectsRes.data);
     } catch (error) {
       console.error('Error subscribing:', error);
       alert('Ошибка при подписке на предмет');
@@ -77,7 +98,9 @@ function TeacherDashboard({ user, onLogout }) {
   const handleUnsubscribe = async (subjectId) => {
     try {
       await teacherAPI.unsubscribeFromSubject(subjectId, user.userId);
-      loadData();
+      const mySubjectsRes = await teacherAPI.getMySubjects(user.userId);
+      setMySubjects(mySubjectsRes.data);
+      await loadAllLabTemplatesForMyCourses(mySubjectsRes.data);
       if (selectedSubject?.id === subjectId) {
         setSelectedSubject(null);
       }
@@ -122,38 +145,8 @@ function TeacherDashboard({ user, onLogout }) {
           await teacherAPI.createLabTemplate(labTemplate);
         }
         loadLabTemplates();
-      } else if (modalType === 'labSubmission') {
-        const selectedTemplate = labTemplates.find(t => t.id === parseInt(formData.labTemplateId));
-        const points = parseInt(formData.points);
-        
-        if (points > selectedTemplate.maxPoints) {
-          alert(`Баллы не могут превышать максимальные баллы лабораторной работы (${selectedTemplate.maxPoints})`);
-          return;
-        }
-        
-        await teacherAPI.createLabSubmission({
-          labTemplate: { id: parseInt(formData.labTemplateId) },
-          student: { id: parseInt(formData.studentId) },
-          points: points,
-          comment: formData.comment,
-          status: 'GRADED',
-        });
-        loadLabSubmissions();
-      } else if (modalType === 'gradeSubmission') {
-        const points = parseInt(formData.points);
-        const maxPoints = formData.labTemplate.maxPoints;
-        
-        if (points > maxPoints) {
-          alert(`Баллы не могут превышать максимальные баллы лабораторной работы (${maxPoints})`);
-          return;
-        }
-        
-        await teacherAPI.gradeLabSubmission(formData.id, {
-          ...formData,
-          points: points,
-          status: 'GRADED',
-        });
-        loadLabSubmissions();
+        // Also reload all templates for statistics
+        await loadAllLabTemplatesForMyCourses(mySubjects);
       } else if (modalType === 'attendance') {
         await teacherAPI.addAttendance({
           student: { id: parseInt(formData.studentId) },
@@ -170,6 +163,8 @@ function TeacherDashboard({ user, onLogout }) {
           passed: formData.passed === 'true',
           comment: formData.comment,
         });
+        // Reload attestations to update statistics
+        await loadAttestations(students);
       }
       closeModal();
     } catch (error) {
@@ -187,10 +182,12 @@ function TeacherDashboard({ user, onLogout }) {
   };
 
   const handleDeleteLabTemplate = async (id) => {
-    if (!window.confirm('Удалить шаблон лабораторной работы?')) return;
+    if (!window.confirm('Удалить лабораторную работу?')) return;
     try {
       await teacherAPI.deleteLabTemplate(id);
       loadLabTemplates();
+      // Also reload all templates for statistics
+      await loadAllLabTemplatesForMyCourses(mySubjects);
     } catch (error) {
       console.error('Error deleting lab template:', error);
       alert('Ошибка при удалении');
@@ -228,17 +225,28 @@ function TeacherDashboard({ user, onLogout }) {
             <div className="stat-value">{students.length}</div>
           </div>
           <div className="card stat-card">
-            <div className="stat-label">Моих предметов</div>
+            <div className="stat-label">Активных курсов</div>
             <div className="stat-value">{mySubjects.length}</div>
           </div>
           <div className="card stat-card">
-            <div className="stat-label">Шаблонов лаб</div>
+            <div className="stat-label">Всего лаб</div>
             <div className="stat-value">{labTemplates.length}</div>
           </div>
           <div className="card stat-card">
-            <div className="stat-label">На проверке</div>
+            <div className="stat-label">Аттестованы</div>
             <div className="stat-value">
-              {labSubmissions.filter((s) => s.status === 'PENDING').length}
+              {(() => {
+                // Filter final attestations for teacher's active courses
+                const mySubjectIds = mySubjects.map(s => s.id);
+                const finalAttestations = attestations.filter(
+                  a => a.type === 'FINAL' && 
+                       a.passed && 
+                       mySubjectIds.includes(a.subject?.id)
+                );
+                // Total expected attestations = number of active courses * number of students
+                const totalExpected = mySubjects.length * students.length;
+                return `${finalAttestations.length} / ${totalExpected}`;
+              })()}
             </div>
           </div>
         </div>
@@ -250,21 +258,14 @@ function TeacherDashboard({ user, onLogout }) {
               className={`tab ${activeTab === 'subjects' ? 'active' : ''}`}
               onClick={() => setActiveTab('subjects')}
             >
-              📚 Предметы
+              📚 Курсы
             </button>
             <button
               className={`tab ${activeTab === 'labs' ? 'active' : ''}`}
               onClick={() => setActiveTab('labs')}
               disabled={!selectedSubject}
             >
-              🧪 Учебный план
-            </button>
-            <button
-              className={`tab ${activeTab === 'submissions' ? 'active' : ''}`}
-              onClick={() => setActiveTab('submissions')}
-              disabled={!selectedSubject}
-            >
-              📝 Выполнения
+              🧪 Лабораторные
             </button>
             <button
               className={`tab ${activeTab === 'grades' ? 'active' : ''}`}
@@ -292,7 +293,7 @@ function TeacherDashboard({ user, onLogout }) {
           <div className="tab-content">
             {activeTab === 'subjects' && (
               <div>
-                <h3 style={{ marginBottom: '15px' }}>Мои предметы</h3>
+                <h3 style={{ marginBottom: '15px' }}>Активные курсы</h3>
                 {mySubjects.length > 0 ? (
                   <div className="subjects-grid">
                     {mySubjects.map((subject) => (
@@ -316,10 +317,10 @@ function TeacherDashboard({ user, onLogout }) {
                     ))}
                   </div>
                 ) : (
-                  <p style={{ color: '#64748b' }}>Вы не подписаны ни на один предмет</p>
+                  <p style={{ color: '#64748b' }}>Вы не подписаны ни на один курс</p>
                 )}
 
-                <h3 style={{ marginTop: '30px', marginBottom: '15px' }}>Все предметы</h3>
+                <h3 style={{ marginTop: '30px', marginBottom: '15px' }}>Все курсы</h3>
                 <div className="subjects-grid">
                   {allSubjects.map((subject) => (
                     <div key={subject.id} className="subject-card">
@@ -344,26 +345,26 @@ function TeacherDashboard({ user, onLogout }) {
             {activeTab === 'labs' && selectedSubject && (
               <div>
                 <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3>Учебный план: {selectedSubject.name}</h3>
+                  <h3>Лабораторные: {selectedSubject.name}</h3>
                   <button className="btn btn-primary" onClick={() => openModal('labTemplate')}>
                     + Добавить лабу
                   </button>
                 </div>
 
-                {labTemplates.length > 0 ? (
-                  <div className="table-container">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>№</th>
-                          <th>Название</th>
-                          <th>Описание</th>
-                          <th>Макс. баллы</th>
-                          <th>Действия</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {labTemplates.map((template) => (
+                  {selectedSubjectLabTemplates.length > 0 ? (
+                    <div className="table-container">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>№</th>
+                            <th>Название</th>
+                            <th>Описание</th>
+                            <th>Макс. баллы</th>
+                            <th>Действия</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedSubjectLabTemplates.map((template) => (
                           <tr key={template.id}>
                             <td>{template.orderNumber}</td>
                             <td>{template.title}</td>
@@ -393,85 +394,6 @@ function TeacherDashboard({ user, onLogout }) {
                   </div>
                 ) : (
                   <p style={{ color: '#64748b' }}>Нет лабораторных работ в учебном плане</p>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'submissions' && selectedSubject && (
-              <div>
-                <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3>Выполнения студентов: {selectedSubject.name}</h3>
-                  <button className="btn btn-primary" onClick={() => openModal('labSubmission')}>
-                    + Оценить работу
-                  </button>
-                </div>
-
-                {labSubmissions.length > 0 ? (
-                  <div className="table-container">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Студент</th>
-                          <th>Лабораторная</th>
-                          <th>Баллы</th>
-                          <th>Статус</th>
-                          <th>Комментарий</th>
-                          <th>Дата сдачи</th>
-                          <th>Действия</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {labSubmissions.map((submission) => (
-                          <tr key={submission.id}>
-                            <td>
-                              {submission.student
-                                ? `${submission.student.firstName} ${submission.student.lastName}`
-                                : '-'}
-                            </td>
-                            <td>{submission.labTemplate?.title || '-'}</td>
-                            <td>
-                              <span className="badge badge-success">
-                                {submission.points}/{submission.labTemplate?.maxPoints || 0}
-                              </span>
-                            </td>
-                            <td>
-                              <span
-                                className={`badge ${
-                                  submission.status === 'GRADED'
-                                    ? 'badge-success'
-                                    : submission.status === 'PENDING'
-                                    ? 'badge-warning'
-                                    : 'badge-danger'
-                                }`}
-                              >
-                                {submission.status === 'GRADED'
-                                  ? 'Оценено'
-                                  : submission.status === 'PENDING'
-                                  ? 'На проверке'
-                                  : 'Отклонено'}
-                              </span>
-                            </td>
-                            <td>{submission.comment || '-'}</td>
-                            <td>
-                              {submission.submittedAt
-                                ? new Date(submission.submittedAt).toLocaleDateString()
-                                : '-'}
-                            </td>
-                            <td>
-                              <button
-                                className="btn btn-sm btn-primary"
-                                onClick={() => openModal('gradeSubmission', submission)}
-                              >
-                                Оценить
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p style={{ color: '#64748b' }}>Нет выполненных работ</p>
                 )}
               </div>
             )}
@@ -558,8 +480,6 @@ function TeacherDashboard({ user, onLogout }) {
             <div className="modal-header">
               {modalType === 'grade' && 'Добавить оценку'}
               {modalType === 'labTemplate' && (formData.id ? 'Редактировать лабу' : 'Добавить лабу')}
-              {modalType === 'labSubmission' && 'Оценить работу студента'}
-              {modalType === 'gradeSubmission' && 'Изменить оценку'}
               {modalType === 'attendance' && 'Отметить посещение'}
               {modalType === 'attestation' && 'Добавить аттестацию'}
             </div>
@@ -609,86 +529,6 @@ function TeacherDashboard({ user, onLogout }) {
                       min="1"
                       value={formData.maxPoints || ''}
                       required
-                      onChange={handleChange}
-                    />
-                  </div>
-                </>
-              )}
-
-              {(modalType === 'labSubmission' || modalType === 'gradeSubmission') && (
-                <>
-                  {modalType === 'labSubmission' && (
-                    <>
-                      <div className="form-group">
-                        <label className="form-label">Студент</label>
-                        <select
-                          name="studentId"
-                          className="form-select"
-                          required
-                          onChange={handleChange}
-                        >
-                          <option value="">Выберите студента</option>
-                          {students.map((student) => (
-                            <option key={student.id} value={student.id}>
-                              {student.firstName} {student.lastName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Лабораторная работа</label>
-                        <select
-                          name="labTemplateId"
-                          className="form-select"
-                          required
-                          onChange={handleChange}
-                        >
-                          <option value="">Выберите лабу</option>
-                          {labTemplates.map((template) => (
-                            <option key={template.id} value={template.id}>
-                              {template.title} (макс. {template.maxPoints} баллов)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
-                  )}
-                  <div className="form-group">
-                    <label className="form-label">
-                      Баллы
-                      {modalType === 'gradeSubmission' && formData.labTemplate && (
-                        <span style={{ color: '#64748b', fontSize: '12px', marginLeft: '8px' }}>
-                          (макс. {formData.labTemplate.maxPoints})
-                        </span>
-                      )}
-                      {modalType === 'labSubmission' && formData.labTemplateId && (
-                        <span style={{ color: '#64748b', fontSize: '12px', marginLeft: '8px' }}>
-                          (макс. {labTemplates.find(t => t.id === parseInt(formData.labTemplateId))?.maxPoints})
-                        </span>
-                      )}
-                    </label>
-                    <input
-                      type="number"
-                      name="points"
-                      className="form-control"
-                      min="0"
-                      max={
-                        modalType === 'gradeSubmission' 
-                          ? formData.labTemplate?.maxPoints 
-                          : labTemplates.find(t => t.id === parseInt(formData.labTemplateId))?.maxPoints
-                      }
-                      value={formData.points || ''}
-                      required
-                      onChange={handleChange}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Комментарий</label>
-                    <textarea
-                      name="comment"
-                      className="form-control"
-                      rows="3"
-                      value={formData.comment || ''}
                       onChange={handleChange}
                     />
                   </div>

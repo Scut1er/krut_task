@@ -100,9 +100,13 @@ public class StudentController {
                 .average()
                 .orElse(0.0);
         
-        int totalLabs = labs.size();
-        int totalPoints = labs.stream()
+        int completedLabs = labs.size();
+        int totalLabTemplates = labTemplateRepository.findAll().size();
+        int earnedPoints = labs.stream()
                 .mapToInt(LabSubmission::getPoints)
+                .sum();
+        int maxPossiblePoints = labTemplateRepository.findAll().stream()
+                .mapToInt(LabTemplate::getMaxPoints)
                 .sum();
         
         long totalClasses = attendance.size();
@@ -113,8 +117,10 @@ public class StudentController {
         double attendanceRate = totalClasses > 0 ? (attendedClasses * 100.0 / totalClasses) : 0.0;
         
         dashboard.put("averageGrade", averageGrade);
-        dashboard.put("totalLabs", totalLabs);
-        dashboard.put("totalPoints", totalPoints);
+        dashboard.put("completedLabs", completedLabs);
+        dashboard.put("totalLabs", totalLabTemplates);
+        dashboard.put("earnedPoints", earnedPoints);
+        dashboard.put("maxPossiblePoints", maxPossiblePoints);
         dashboard.put("attendanceRate", attendanceRate);
         dashboard.put("attestations", attestations);
         dashboard.put("recentGrades", grades.stream().limit(5).toList());

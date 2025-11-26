@@ -7,7 +7,6 @@ function AdminDashboard({ user, onLogout }) {
   const [subjects, setSubjects] = useState([]);
   const [grades, setGrades] = useState([]);
   const [labTemplates, setLabTemplates] = useState([]);
-  const [labSubmissions, setLabSubmissions] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [attestations, setAttestations] = useState([]);
   
@@ -39,10 +38,6 @@ function AdminDashboard({ user, onLogout }) {
         case 'labTemplates':
           const labTemplatesRes = await adminAPI.getLabTemplates();
           setLabTemplates(labTemplatesRes.data);
-          break;
-        case 'labSubmissions':
-          const labSubmissionsRes = await adminAPI.getLabSubmissions();
-          setLabSubmissions(labSubmissionsRes.data);
           break;
         case 'attendance':
           const attendanceRes = await adminAPI.getAttendance();
@@ -121,9 +116,6 @@ function AdminDashboard({ user, onLogout }) {
         case 'labTemplates':
           await adminAPI.deleteLabTemplate(id);
           break;
-        case 'labSubmissions':
-          await adminAPI.deleteLabSubmission(id);
-          break;
         case 'attendance':
           await adminAPI.deleteAttendance(id);
           break;
@@ -182,13 +174,7 @@ function AdminDashboard({ user, onLogout }) {
               className={`tab ${activeTab === 'labTemplates' ? 'active' : ''}`}
               onClick={() => setActiveTab('labTemplates')}
             >
-              📝 Шаблоны лаб
-            </button>
-            <button
-              className={`tab ${activeTab === 'labSubmissions' ? 'active' : ''}`}
-              onClick={() => setActiveTab('labSubmissions')}
-            >
-              🧪 Выполнения
+              📝 Лабораторные
             </button>
             <button
               className={`tab ${activeTab === 'attendance' ? 'active' : ''}`}
@@ -378,75 +364,6 @@ function AdminDashboard({ user, onLogout }) {
                               <button
                                 className="btn btn-sm btn-danger"
                                 onClick={() => handleDelete(template.id)}
-                              >
-                                🗑️ Удалить
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Lab Submissions Table */}
-                {activeTab === 'labSubmissions' && (
-                  <div className="table-container" style={{ marginTop: '20px' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>Студент</th>
-                          <th>Лабораторная</th>
-                          <th>Предмет</th>
-                          <th>Баллы</th>
-                          <th>Статус</th>
-                          <th>Дата сдачи</th>
-                          <th>Действия</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {labSubmissions.map((submission) => (
-                          <tr key={submission.id}>
-                            <td>{submission.id}</td>
-                            <td>
-                              {submission.student
-                                ? `${submission.student.firstName} ${submission.student.lastName}`
-                                : '-'}
-                            </td>
-                            <td>{submission.labTemplate?.title || '-'}</td>
-                            <td>{submission.labTemplate?.subject?.name || '-'}</td>
-                            <td>
-                              <span className="badge badge-success">
-                                {submission.points}/{submission.labTemplate?.maxPoints || 0}
-                              </span>
-                            </td>
-                            <td>
-                              <span
-                                className={`badge ${
-                                  submission.status === 'GRADED'
-                                    ? 'badge-success'
-                                    : submission.status === 'PENDING'
-                                    ? 'badge-warning'
-                                    : 'badge-danger'
-                                }`}
-                              >
-                                {submission.status === 'GRADED'
-                                  ? 'Оценено'
-                                  : submission.status === 'PENDING'
-                                  ? 'На проверке'
-                                  : 'Отклонено'}
-                              </span>
-                            </td>
-                            <td>
-                              {submission.submittedAt
-                                ? new Date(submission.submittedAt).toLocaleDateString()
-                                : '-'}
-                            </td>
-                            <td>
-                              <button
-                                className="btn btn-sm btn-danger"
-                                onClick={() => handleDelete(submission.id)}
                               >
                                 🗑️ Удалить
                               </button>
