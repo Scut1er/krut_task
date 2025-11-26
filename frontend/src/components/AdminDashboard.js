@@ -5,10 +5,6 @@ function AdminDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [grades, setGrades] = useState([]);
-  const [labTemplates, setLabTemplates] = useState([]);
-  const [attendance, setAttendance] = useState([]);
-  const [attestations, setAttestations] = useState([]);
   
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -30,22 +26,6 @@ function AdminDashboard({ user, onLogout }) {
         case 'subjects':
           const subjectsRes = await adminAPI.getSubjects();
           setSubjects(subjectsRes.data);
-          break;
-        case 'grades':
-          const gradesRes = await adminAPI.getGrades();
-          setGrades(gradesRes.data);
-          break;
-        case 'labTemplates':
-          const labTemplatesRes = await adminAPI.getLabTemplates();
-          setLabTemplates(labTemplatesRes.data);
-          break;
-        case 'attendance':
-          const attendanceRes = await adminAPI.getAttendance();
-          setAttendance(attendanceRes.data);
-          break;
-        case 'attestations':
-          const attestationsRes = await adminAPI.getAttestations();
-          setAttestations(attestationsRes.data);
           break;
         default:
           break;
@@ -110,18 +90,6 @@ function AdminDashboard({ user, onLogout }) {
         case 'subjects':
           await adminAPI.deleteSubject(id);
           break;
-        case 'grades':
-          await adminAPI.deleteGrade(id);
-          break;
-        case 'labTemplates':
-          await adminAPI.deleteLabTemplate(id);
-          break;
-        case 'attendance':
-          await adminAPI.deleteAttendance(id);
-          break;
-        case 'attestations':
-          await adminAPI.deleteAttestation(id);
-          break;
         default:
           break;
       }
@@ -163,30 +131,6 @@ function AdminDashboard({ user, onLogout }) {
               onClick={() => setActiveTab('subjects')}
             >
               📚 Предметы
-            </button>
-            <button
-              className={`tab ${activeTab === 'grades' ? 'active' : ''}`}
-              onClick={() => setActiveTab('grades')}
-            >
-              🎯 Оценки
-            </button>
-            <button
-              className={`tab ${activeTab === 'labTemplates' ? 'active' : ''}`}
-              onClick={() => setActiveTab('labTemplates')}
-            >
-              📝 Лабораторные
-            </button>
-            <button
-              className={`tab ${activeTab === 'attendance' ? 'active' : ''}`}
-              onClick={() => setActiveTab('attendance')}
-            >
-              📅 Посещаемость
-            </button>
-            <button
-              className={`tab ${activeTab === 'attestations' ? 'active' : ''}`}
-              onClick={() => setActiveTab('attestations')}
-            >
-              📋 Аттестации
             </button>
           </div>
 
@@ -295,182 +239,6 @@ function AdminDashboard({ user, onLogout }) {
                   </div>
                 )}
 
-                {/* Grades Table */}
-                {activeTab === 'grades' && (
-                  <div className="table-container" style={{ marginTop: '20px' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>Студент</th>
-                          <th>Предмет</th>
-                          <th>Оценка</th>
-                          <th>Описание</th>
-                          <th>Дата</th>
-                          <th>Действия</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {grades.map((g) => (
-                          <tr key={g.id}>
-                            <td>{g.id}</td>
-                            <td>
-                              {g.student ? `${g.student.firstName} ${g.student.lastName}` : '-'}
-                            </td>
-                            <td>{g.subject?.name || '-'}</td>
-                            <td><strong style={{ fontSize: '18px', color: 'var(--primary)' }}>{g.value}</strong></td>
-                            <td>{g.description || '-'}</td>
-                            <td>{g.createdAt ? new Date(g.createdAt).toLocaleDateString() : '-'}</td>
-                            <td>
-                              <button
-                                className="btn btn-sm btn-danger"
-                                onClick={() => handleDelete(g.id)}
-                              >
-                                🗑️ Удалить
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Lab Templates Table */}
-                {activeTab === 'labTemplates' && (
-                  <div className="table-container" style={{ marginTop: '20px' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>№</th>
-                          <th>Название</th>
-                          <th>Предмет</th>
-                          <th>Макс. баллы</th>
-                          <th>Дата создания</th>
-                          <th>Действия</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {labTemplates.map((template) => (
-                          <tr key={template.id}>
-                            <td>{template.id}</td>
-                            <td>{template.orderNumber}</td>
-                            <td>{template.title}</td>
-                            <td>{template.subject?.name || '-'}</td>
-                            <td><span className="badge badge-info">{template.maxPoints}</span></td>
-                            <td>{template.createdAt ? new Date(template.createdAt).toLocaleDateString() : '-'}</td>
-                            <td>
-                              <button
-                                className="btn btn-sm btn-danger"
-                                onClick={() => handleDelete(template.id)}
-                              >
-                                🗑️ Удалить
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Attendance Table */}
-                {activeTab === 'attendance' && (
-                  <div className="table-container" style={{ marginTop: '20px' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>Студент</th>
-                          <th>Предмет</th>
-                          <th>Дата</th>
-                          <th>Статус</th>
-                          <th>Примечание</th>
-                          <th>Действия</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attendance.map((a) => (
-                          <tr key={a.id}>
-                            <td>{a.id}</td>
-                            <td>
-                              {a.student ? `${a.student.firstName} ${a.student.lastName}` : '-'}
-                            </td>
-                            <td>{a.subject?.name || '-'}</td>
-                            <td>{a.date}</td>
-                            <td>
-                              <span className={`badge ${a.present ? 'badge-success' : 'badge-danger'}`}>
-                                {a.present ? 'Присутствовал' : 'Отсутствовал'}
-                              </span>
-                            </td>
-                            <td>{a.note || '-'}</td>
-                            <td>
-                              <button
-                                className="btn btn-sm btn-danger"
-                                onClick={() => handleDelete(a.id)}
-                              >
-                                🗑️ Удалить
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Attestations Table */}
-                {activeTab === 'attestations' && (
-                  <div className="table-container" style={{ marginTop: '20px' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>Студент</th>
-                          <th>Предмет</th>
-                          <th>Тип</th>
-                          <th>Статус</th>
-                          <th>Комментарий</th>
-                          <th>Дата</th>
-                          <th>Действия</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attestations.map((a) => (
-                          <tr key={a.id}>
-                            <td>{a.id}</td>
-                            <td>
-                              {a.student ? `${a.student.firstName} ${a.student.lastName}` : '-'}
-                            </td>
-                            <td>{a.subject?.name || '-'}</td>
-                            <td>
-                              <span className="badge badge-info">
-                                {a.type === 'FIRST' ? 'Первая' :
-                                 a.type === 'SECOND' ? 'Вторая' : 'Финальная'}
-                              </span>
-                            </td>
-                            <td>
-                              <span className={`badge ${a.passed ? 'badge-success' : 'badge-danger'}`}>
-                                {a.passed ? 'Зачтено' : 'Не зачтено'}
-                              </span>
-                            </td>
-                            <td>{a.comment || '-'}</td>
-                            <td>{a.createdAt ? new Date(a.createdAt).toLocaleDateString() : '-'}</td>
-                            <td>
-                              <button
-                                className="btn btn-sm btn-danger"
-                                onClick={() => handleDelete(a.id)}
-                              >
-                                🗑️ Удалить
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </>
             )}
           </div>

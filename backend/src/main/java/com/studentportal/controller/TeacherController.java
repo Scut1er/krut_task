@@ -13,7 +13,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/teacher")
 @CrossOrigin(origins = "*")
-@PreAuthorize("hasRole('TEACHER')")
+@PreAuthorize("hasAuthority('ROLE_TEACHER')")
 public class TeacherController {
     
     @Autowired
@@ -47,15 +47,38 @@ public class TeacherController {
     }
     
     @PostMapping("/grades")
+    @PreAuthorize("hasAuthority('ROLE_TEACHER')")
     public ResponseEntity<Grade> addGrade(@RequestBody Grade grade) {
         Grade savedGrade = gradeRepository.save(grade);
         return ResponseEntity.ok(savedGrade);
     }
     
     @PutMapping("/grades/{id}")
+    @PreAuthorize("hasAuthority('ROLE_TEACHER')")
     public ResponseEntity<Grade> updateGrade(@PathVariable Long id, @RequestBody Grade grade) {
-        grade.setId(id);
-        Grade updatedGrade = gradeRepository.save(grade);
+        Grade existing = gradeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Grade not found"));
+        
+        // Update only the fields that can be changed
+        if (grade.getValue() != null) {
+            existing.setValue(grade.getValue());
+        }
+        if (grade.getDescription() != null) {
+            existing.setDescription(grade.getDescription());
+        }
+        // Update student and subject if provided
+        if (grade.getStudent() != null && grade.getStudent().getId() != null) {
+            User student = userRepository.findById(grade.getStudent().getId())
+                    .orElseThrow(() -> new RuntimeException("Student not found"));
+            existing.setStudent(student);
+        }
+        if (grade.getSubject() != null && grade.getSubject().getId() != null) {
+            Subject subject = subjectRepository.findById(grade.getSubject().getId())
+                    .orElseThrow(() -> new RuntimeException("Subject not found"));
+            existing.setSubject(subject);
+        }
+        
+        Grade updatedGrade = gradeRepository.save(existing);
         return ResponseEntity.ok(updatedGrade);
     }
     
@@ -63,6 +86,11 @@ public class TeacherController {
     public ResponseEntity<?> deleteGrade(@PathVariable Long id) {
         gradeRepository.deleteById(id);
         return ResponseEntity.ok().build();
+    }
+    
+    @GetMapping("/grades/subject/{subjectId}")
+    public ResponseEntity<List<Grade>> getGradesBySubject(@PathVariable Long subjectId) {
+        return ResponseEntity.ok(gradeRepository.findBySubject_Id(subjectId));
     }
     
     // Subject Subscription Management
@@ -127,15 +155,31 @@ public class TeacherController {
     }
     
     @PostMapping("/lab-submissions")
+    @PreAuthorize("hasAuthority('ROLE_TEACHER')")
     public ResponseEntity<?> createLabSubmission(@RequestBody LabSubmission labSubmission) {
+        // Load lab template from database to get maxPoints
+        if (labSubmission.getLabTemplate() == null || labSubmission.getLabTemplate().getId() == null) {
+            return ResponseEntity.badRequest().body("Лабораторная работа не указана");
+        }
+        
+        LabTemplate labTemplate = labTemplateRepository.findById(labSubmission.getLabTemplate().getId())
+                .orElseThrow(() -> new RuntimeException("Lab template not found"));
+        
         // Validate points
-        if (labSubmission.getPoints() > labSubmission.getLabTemplate().getMaxPoints()) {
+        if (labTemplate.getMaxPoints() == null) {
+            return ResponseEntity.badRequest().body("Максимальные баллы не установлены для лабораторной работы");
+        }
+        
+        if (labSubmission.getPoints() > labTemplate.getMaxPoints()) {
             return ResponseEntity.badRequest().body("Баллы не могут превышать максимальные баллы лабораторной работы (" + 
-                labSubmission.getLabTemplate().getMaxPoints() + ")");
+                labTemplate.getMaxPoints() + ")");
         }
         if (labSubmission.getPoints() < 0) {
             return ResponseEntity.badRequest().body("Баллы не могут быть отрицательными");
         }
+        
+        // Set the loaded lab template
+        labSubmission.setLabTemplate(labTemplate);
         
         LabSubmission savedLabSubmission = labSubmissionRepository.save(labSubmission);
         return ResponseEntity.ok(savedLabSubmission);
@@ -164,6 +208,17 @@ public class TeacherController {
         return ResponseEntity.ok(updatedLabSubmission);
     }
     
+    @DeleteMapping("/lab-submissions/{id}")
+    public ResponseEntity<?> deleteLabSubmission(@PathVariable Long id) {
+        labSubmissionRepository.deleteById(id);
+        return ResponseEntity.ok().build();
+    }
+    
+    @GetMapping("/attendance/subject/{subjectId}")
+    public ResponseEntity<List<Attendance>> getAttendanceBySubject(@PathVariable Long subjectId) {
+        return ResponseEntity.ok(attendanceRepository.findBySubject_Id(subjectId));
+    }
+    
     @PostMapping("/attendance")
     public ResponseEntity<Attendance> addAttendance(@RequestBody Attendance attendance) {
         Attendance savedAttendance = attendanceRepository.save(attendance);
@@ -183,6 +238,11 @@ public class TeacherController {
         return ResponseEntity.ok().build();
     }
     
+    @GetMapping("/attestations/subject/{subjectId}")
+    public ResponseEntity<List<Attestation>> getAttestationsBySubject(@PathVariable Long subjectId) {
+        return ResponseEntity.ok(attestationRepository.findBySubject_Id(subjectId));
+    }
+    
     @PostMapping("/attestations")
     public ResponseEntity<Attestation> addAttestation(@RequestBody Attestation attestation) {
         Attestation savedAttestation = attestationRepository.save(attestation);
@@ -190,9 +250,34 @@ public class TeacherController {
     }
     
     @PutMapping("/attestations/{id}")
+    @PreAuthorize("hasAuthority('ROLE_TEACHER')")
     public ResponseEntity<Attestation> updateAttestation(@PathVariable Long id, @RequestBody Attestation attestation) {
-        attestation.setId(id);
-        Attestation updatedAttestation = attestationRepository.save(attestation);
+        Attestation existing = attestationRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Attestation not found"));
+        
+        // Update only the fields that can be changed
+        if (attestation.getType() != null) {
+            existing.setType(attestation.getType());
+        }
+        if (attestation.getPassed() != null) {
+            existing.setPassed(attestation.getPassed());
+        }
+        if (attestation.getComment() != null) {
+            existing.setComment(attestation.getComment());
+        }
+        // Update student and subject if provided
+        if (attestation.getStudent() != null && attestation.getStudent().getId() != null) {
+            User student = userRepository.findById(attestation.getStudent().getId())
+                    .orElseThrow(() -> new RuntimeException("Student not found"));
+            existing.setStudent(student);
+        }
+        if (attestation.getSubject() != null && attestation.getSubject().getId() != null) {
+            Subject subject = subjectRepository.findById(attestation.getSubject().getId())
+                    .orElseThrow(() -> new RuntimeException("Subject not found"));
+            existing.setSubject(subject);
+        }
+        
+        Attestation updatedAttestation = attestationRepository.save(existing);
         return ResponseEntity.ok(updatedAttestation);
     }
     

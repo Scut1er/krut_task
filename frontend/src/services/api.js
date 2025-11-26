@@ -41,6 +41,7 @@ export const teacherAPI = {
   subscribeToSubject: (subjectId, teacherId) => api.post(`/teacher/subjects/${subjectId}/subscribe`, null, { params: { teacherId } }),
   unsubscribeFromSubject: (subjectId, teacherId) => api.delete(`/teacher/subjects/${subjectId}/unsubscribe`, { params: { teacherId } }),
   
+  getGradesBySubject: (subjectId) => api.get(`/teacher/grades/subject/${subjectId}`),
   addGrade: (grade) => api.post('/teacher/grades', grade),
   updateGrade: (id, grade) => api.put(`/teacher/grades/${id}`, grade),
   deleteGrade: (id) => api.delete(`/teacher/grades/${id}`),
@@ -55,11 +56,14 @@ export const teacherAPI = {
   getLabSubmissionsBySubject: (subjectId) => api.get(`/teacher/lab-submissions/subject/${subjectId}`),
   createLabSubmission: (labSubmission) => api.post('/teacher/lab-submissions', labSubmission),
   gradeLabSubmission: (id, labSubmission) => api.put(`/teacher/lab-submissions/${id}`, labSubmission),
+  deleteLabSubmission: (id) => api.delete(`/teacher/lab-submissions/${id}`),
   
+  getAttendanceBySubject: (subjectId) => api.get(`/teacher/attendance/subject/${subjectId}`),
   addAttendance: (attendance) => api.post('/teacher/attendance', attendance),
   updateAttendance: (id, attendance) => api.put(`/teacher/attendance/${id}`, attendance),
   deleteAttendance: (id) => api.delete(`/teacher/attendance/${id}`),
   
+  getAttestationsBySubject: (subjectId) => api.get(`/teacher/attestations/subject/${subjectId}`),
   addAttestation: (attestation) => api.post('/teacher/attestations', attestation),
   updateAttestation: (id, attestation) => api.put(`/teacher/attestations/${id}`, attestation),
   deleteAttestation: (id) => api.delete(`/teacher/attestations/${id}`),

@@ -11,6 +11,7 @@ import java.util.List;
 public interface AttestationRepository extends JpaRepository<Attestation, Long> {
     List<Attestation> findByStudent(User student);
     List<Attestation> findByStudentId(Long studentId);
+    List<Attestation> findBySubject_Id(Long subjectId);
 }
 
 
