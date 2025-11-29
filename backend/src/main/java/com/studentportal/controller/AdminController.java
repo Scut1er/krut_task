@@ -70,7 +70,9 @@ public class AdminController {
         existingUser.setStudentGroup(user.getStudentGroup());
         existingUser.setDepartment(user.getDepartment());
         
-        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
+        // Обновляем пароль только если он был передан и не является уже захешированным
+        // BCrypt хеш всегда начинается с $2a$ или $2b$
+        if (user.getPassword() != null && !user.getPassword().isEmpty() && !user.getPassword().startsWith("$2")) {
             existingUser.setPassword(passwordEncoder.encode(user.getPassword()));
         }
         

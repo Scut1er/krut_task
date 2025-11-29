@@ -42,7 +42,13 @@ function AdminDashboard({ user, onLogout }) {
 
   const openModal = (item = null) => {
     setEditingItem(item);
-    setFormData(item || {});
+    // При редактировании не включаем пароль в formData
+    if (item) {
+      const { password, ...userDataWithoutPassword } = item;
+      setFormData(userDataWithoutPassword);
+    } else {
+      setFormData({});
+    }
     setShowModal(true);
   };
 
@@ -62,7 +68,13 @@ function AdminDashboard({ user, onLogout }) {
     try {
       if (activeTab === 'users') {
         if (editingItem) {
-          await adminAPI.updateUser(editingItem.id, formData);
+          // При редактировании не отправляем пароль, если он не был изменен
+          const updateData = { ...formData };
+          // Удаляем поле password, если оно не было введено или пустое
+          if (!updateData.password || updateData.password.trim() === '') {
+            delete updateData.password;
+          }
+          await adminAPI.updateUser(editingItem.id, updateData);
         } else {
           await adminAPI.createUser(formData);
         }
