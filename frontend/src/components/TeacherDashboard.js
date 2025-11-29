@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { teacherAPI, studentAPI } from '../services/api';
 
 function TeacherDashboard({ user, onLogout }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [students, setStudents] = useState([]);
   const [allSubjects, setAllSubjects] = useState([]);
   const [mySubjects, setMySubjects] = useState([]);
-  const [activeTab, setActiveTab] = useState('subjects');
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'subjects');
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [labTemplates, setLabTemplates] = useState([]);
   const [selectedSubjectLabTemplates, setSelectedSubjectLabTemplates] = useState([]);
@@ -13,14 +15,38 @@ function TeacherDashboard({ user, onLogout }) {
   const [grades, setGrades] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [attestations, setAttestations] = useState([]);
+  const [allAttestations, setAllAttestations] = useState([]); // Для статистики
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(true);
 
+  const [hasRestoredFromUrl, setHasRestoredFromUrl] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Восстанавливаем выбранный предмет и вкладку из URL после загрузки данных (только один раз)
+  useEffect(() => {
+    if (mySubjects.length > 0 && !hasRestoredFromUrl) {
+      const subjectIdFromUrl = searchParams.get('subjectId');
+      const tabFromUrl = searchParams.get('tab');
+      
+      if (subjectIdFromUrl) {
+        const subject = mySubjects.find(s => s.id === parseInt(subjectIdFromUrl));
+        if (subject) {
+          setSelectedSubject(subject);
+        }
+      }
+      
+      if (tabFromUrl && ['labs', 'submissions', 'grades', 'attendance', 'attestations'].includes(tabFromUrl)) {
+        setActiveTab(tabFromUrl);
+      }
+      
+      setHasRestoredFromUrl(true);
+    }
+  }, [mySubjects, searchParams, hasRestoredFromUrl]);
 
   useEffect(() => {
     if (selectedSubject && activeTab === 'labs') {
@@ -40,6 +66,22 @@ function TeacherDashboard({ user, onLogout }) {
     }
   }, [selectedSubject, activeTab]);
 
+  // Обновляем URL при изменении выбранного предмета или вкладки (только после восстановления из URL)
+  useEffect(() => {
+    if (!hasRestoredFromUrl) {
+      return; // Не обновляем URL до восстановления из него
+    }
+    
+    const params = new URLSearchParams();
+    if (selectedSubject) {
+      params.set('subjectId', selectedSubject.id);
+    }
+    if (activeTab && activeTab !== 'subjects') {
+      params.set('tab', activeTab);
+    }
+    setSearchParams(params, { replace: true });
+  }, [selectedSubject, activeTab, setSearchParams, hasRestoredFromUrl]);
+
   const loadData = async () => {
     try {
       const [studentsRes, subjectsRes, mySubjectsRes] = await Promise.all([
@@ -54,8 +96,19 @@ function TeacherDashboard({ user, onLogout }) {
       // Load all lab templates for active courses
       await loadAllLabTemplatesForMyCourses(mySubjectsRes.data);
       
-      // Load attestations for all students
-      await loadAttestations(studentsRes.data);
+      // Load attestations for all students (for statistics display)
+      // Но не устанавливаем их в attestations, если есть выбранный предмет
+      const subjectIdFromUrl = searchParams.get('subjectId');
+      const allAttestationsData = [];
+      for (const student of studentsRes.data) {
+        const res = await studentAPI.getAttestations(student.id);
+        allAttestationsData.push(...res.data);
+      }
+      setAllAttestations(allAttestationsData);
+      // Устанавливаем в attestations только если нет выбранного предмета в URL
+      if (!subjectIdFromUrl) {
+        setAttestations(allAttestationsData);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -65,12 +118,16 @@ function TeacherDashboard({ user, onLogout }) {
 
   const loadAttestations = async (studentsList) => {
     try {
-      const allAttestations = [];
+      const allAttestationsData = [];
       for (const student of studentsList) {
         const res = await studentAPI.getAttestations(student.id);
-        allAttestations.push(...res.data);
+        allAttestationsData.push(...res.data);
       }
-      setAttestations(allAttestations);
+      setAllAttestations(allAttestationsData);
+      // Устанавливаем в attestations только если нет выбранного предмета
+      if (!selectedSubject) {
+        setAttestations(allAttestationsData);
+      }
     } catch (error) {
       console.error('Error loading attestations:', error);
     }
@@ -167,7 +224,20 @@ function TeacherDashboard({ user, onLogout }) {
 
   const openModal = async (type, item = null) => {
     setModalType(type);
-    setFormData(item || {});
+    
+    // Извлекаем только нужные поля для labTemplate, чтобы избежать проблем с вложенными объектами
+    if (item && type === 'labTemplate') {
+      setFormData({
+        id: item.id,
+        title: item.title || '',
+        description: item.description || '',
+        maxPoints: item.maxPoints || '',
+        orderNumber: item.orderNumber || '',
+      });
+    } else {
+      setFormData(item || {});
+    }
+    
     setShowModal(true);
     
     // Загружаем шаблоны лабораторных работ, если открываем модальное окно оценки
@@ -198,13 +268,31 @@ function TeacherDashboard({ user, onLogout }) {
         }
         loadGrades();
       } else if (modalType === 'labTemplate') {
+        if (!selectedSubject) {
+          alert('Предмет не выбран');
+          return;
+        }
+        
+        const maxPoints = parseInt(formData.maxPoints);
+        const orderNumber = parseInt(formData.orderNumber);
+        
+        if (isNaN(maxPoints) || maxPoints < 1) {
+          alert('Максимальные баллы должны быть положительным числом');
+          return;
+        }
+        if (isNaN(orderNumber) || orderNumber < 1) {
+          alert('Порядковый номер должен быть положительным числом');
+          return;
+        }
+        
         const labTemplate = {
           title: formData.title,
-          description: formData.description,
+          description: formData.description || null,
           subject: { id: selectedSubject.id },
-          maxPoints: parseInt(formData.maxPoints),
-          orderNumber: parseInt(formData.orderNumber),
+          maxPoints: maxPoints,
+          orderNumber: orderNumber,
         };
+        
         if (formData.id) {
           await teacherAPI.updateLabTemplate(formData.id, labTemplate);
         } else {
@@ -273,8 +361,13 @@ function TeacherDashboard({ user, onLogout }) {
           await teacherAPI.addAttestation(attestationData);
         }
         loadAttestationsForSubject();
-        // Reload attestations to update statistics
-        await loadAttestations(students);
+        // Reload all attestations to update statistics
+        const allAttestationsData = [];
+        for (const student of students) {
+          const res = await studentAPI.getAttestations(student.id);
+          allAttestationsData.push(...res.data);
+        }
+        setAllAttestations(allAttestationsData);
       }
       closeModal();
     } catch (error) {
@@ -342,7 +435,13 @@ function TeacherDashboard({ user, onLogout }) {
     try {
       await teacherAPI.deleteAttestation(id);
       loadAttestationsForSubject();
-      await loadAttestations(students);
+      // Reload all attestations to update statistics
+      const allAttestationsData = [];
+      for (const student of students) {
+        const res = await studentAPI.getAttestations(student.id);
+        allAttestationsData.push(...res.data);
+      }
+      setAllAttestations(allAttestationsData);
     } catch (error) {
       console.error('Error deleting attestation:', error);
       alert('Ошибка при удалении');
@@ -393,7 +492,7 @@ function TeacherDashboard({ user, onLogout }) {
               {(() => {
                 // Filter final attestations for teacher's active courses
                 const mySubjectIds = mySubjects.map(s => s.id);
-                const finalAttestations = attestations.filter(
+                const finalAttestations = allAttestations.filter(
                   a => a.type === 'FINAL' && 
                        a.passed && 
                        mySubjectIds.includes(a.subject?.id)

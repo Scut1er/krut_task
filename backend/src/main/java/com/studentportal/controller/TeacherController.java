@@ -135,8 +135,30 @@ public class TeacherController {
     
     @PutMapping("/lab-templates/{id}")
     public ResponseEntity<LabTemplate> updateLabTemplate(@PathVariable Long id, @RequestBody LabTemplate labTemplate) {
-        labTemplate.setId(id);
-        LabTemplate updatedLabTemplate = labTemplateRepository.save(labTemplate);
+        LabTemplate existing = labTemplateRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Lab template not found"));
+        
+        // Update only the fields that can be changed
+        if (labTemplate.getTitle() != null) {
+            existing.setTitle(labTemplate.getTitle());
+        }
+        if (labTemplate.getDescription() != null) {
+            existing.setDescription(labTemplate.getDescription());
+        }
+        if (labTemplate.getMaxPoints() != null) {
+            existing.setMaxPoints(labTemplate.getMaxPoints());
+        }
+        if (labTemplate.getOrderNumber() != null) {
+            existing.setOrderNumber(labTemplate.getOrderNumber());
+        }
+        // Update subject if provided
+        if (labTemplate.getSubject() != null && labTemplate.getSubject().getId() != null) {
+            Subject subject = subjectRepository.findById(labTemplate.getSubject().getId())
+                    .orElseThrow(() -> new RuntimeException("Subject not found"));
+            existing.setSubject(subject);
+        }
+        
+        LabTemplate updatedLabTemplate = labTemplateRepository.save(existing);
         return ResponseEntity.ok(updatedLabTemplate);
     }
     

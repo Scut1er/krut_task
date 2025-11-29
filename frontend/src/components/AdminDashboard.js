@@ -21,7 +21,9 @@ function AdminDashboard({ user, onLogout }) {
       switch (activeTab) {
         case 'users':
           const usersRes = await adminAPI.getUsers();
-          setUsers(usersRes.data);
+          // Фильтруем админов из списка
+          const filteredUsers = usersRes.data.filter(u => u.role !== 'ADMIN');
+          setUsers(filteredUsers);
           break;
         case 'subjects':
           const subjectsRes = await adminAPI.getSubjects();
@@ -83,20 +85,17 @@ function AdminDashboard({ user, onLogout }) {
     if (!window.confirm('Вы уверены, что хотите удалить эту запись?')) return;
     
     try {
-      switch (activeTab) {
-        case 'users':
-          await adminAPI.deleteUser(id);
-          break;
-        case 'subjects':
-          await adminAPI.deleteSubject(id);
-          break;
-        default:
-          break;
+      if (activeTab === 'users') {
+        await adminAPI.deleteUser(id);
+      } else if (activeTab === 'subjects') {
+        await adminAPI.deleteSubject(id);
       }
-      loadData();
+      // Обновляем данные после удаления
+      await loadData();
     } catch (error) {
       console.error('Error deleting:', error);
-      alert('Ошибка при удалении');
+      const errorMessage = error.response?.data || error.message || 'Ошибка при удалении';
+      alert(errorMessage);
     }
   };
 

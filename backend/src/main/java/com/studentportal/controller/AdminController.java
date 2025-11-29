@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,6 +38,9 @@ public class AdminController {
     
     @Autowired
     private SubjectRepository subjectRepository;
+    
+    @Autowired
+    private TeacherSubjectRepository teacherSubjectRepository;
     
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -75,8 +79,45 @@ public class AdminController {
     }
     
     @DeleteMapping("/users/{id}")
+    @Transactional
     public ResponseEntity<?> deleteUser(@PathVariable Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        // Удаляем все связанные записи
+        // Удаляем оценки
+        List<Grade> grades = gradeRepository.findByStudentId(id);
+        if (!grades.isEmpty()) {
+            gradeRepository.deleteAll(grades);
+        }
+        
+        // Удаляем посещаемость
+        List<Attendance> attendances = attendanceRepository.findByStudentId(id);
+        if (!attendances.isEmpty()) {
+            attendanceRepository.deleteAll(attendances);
+        }
+        
+        // Удаляем аттестации
+        List<Attestation> attestations = attestationRepository.findByStudentId(id);
+        if (!attestations.isEmpty()) {
+            attestationRepository.deleteAll(attestations);
+        }
+        
+        // Удаляем лабораторные работы
+        List<LabSubmission> labSubmissions = labSubmissionRepository.findByStudentId(id);
+        if (!labSubmissions.isEmpty()) {
+            labSubmissionRepository.deleteAll(labSubmissions);
+        }
+        
+        // Удаляем связи преподавателя с предметами
+        List<TeacherSubject> teacherSubjects = teacherSubjectRepository.findByTeacherId(id);
+        if (!teacherSubjects.isEmpty()) {
+            teacherSubjectRepository.deleteAll(teacherSubjects);
+        }
+        
+        // Удаляем пользователя
         userRepository.deleteById(id);
+        
         return ResponseEntity.ok().build();
     }
     
